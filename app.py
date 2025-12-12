@@ -4,19 +4,18 @@ from groq import Groq
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="HR AI Reviewer", page_icon="🎭")
-# Versi LINK LANGSUNG (Tanpa ribet variabel)
+
+# --- BADGE PENGUNJUNG (VERSI BARU: Visitor Badge) ---
 st.markdown(
     """
     <div style="text-align: center;">
-        <a href="https://hits.seeyoufarm.com">
-            <img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fhr-ai-demo.streamlit.app&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=false" alt="Hits"/>
-        </a>
+        <h3>Pengunjung: <img src="https://visitor-badge.laobi.icu/badge?page_id=hr_ai_demo_streamlit_app" alt="visitors"></h3>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-# ... lanjut ke st.title ...
+# ... lanjut ke judul & sidebar ...
 
 
 # --- CSS BIAR TAMPILAN LEBIH BERSIH (Opsional) ---
