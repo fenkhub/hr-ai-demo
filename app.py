@@ -17,7 +17,6 @@ st.markdown(
 
 # ... lanjut ke judul & sidebar ...
 
-
 # --- CSS BIAR TAMPILAN LEBIH BERSIH (Opsional) ---
 st.markdown("""
 <style>
@@ -47,6 +46,10 @@ with st.sidebar:
     
     # 3. Upload File
     uploaded_file = st.file_uploader("Upload file CV (PDF)", type=("pdf"))
+
+    if st.sidebar.button("Hapus Chat"):
+        st.session_state.messages = [] # Kosongkan memori
+        st.rerun() # Refresh halaman otomatis
 
 # --- FUNGSI BACA PDF ---
 def extract_text_from_pdf(file):
@@ -98,13 +101,13 @@ if api_key and uploaded_file:
         st.success("✅ PDF terbaca! Siap di-roasting atau dipuji.")
 
     # 3. Update System Prompt Real-time
-    # Setiap kali user ganti radio button, prompt di memori (messages[0]) langsung diupdate
     current_system_prompt = get_system_prompt(mode_hr, st.session_state.pdf_text)
     
-    if "messages" not in st.session_state:
+    # PERBAIKAN: Cek apakah messages belum ada ATAU list-nya kosong (len == 0)
+    if "messages" not in st.session_state or len(st.session_state.messages) == 0:
         st.session_state.messages = [{"role": "system", "content": current_system_prompt}]
     else:
-        # Update prompt sistem di index ke-0 agar sesuai mode yg dipilih sekarang
+        # Kalau ada isinya, baru kita update item pertamanya
         st.session_state.messages[0]["content"] = current_system_prompt
 
     # 4. Tampilkan Chat History
