@@ -1,10 +1,18 @@
 import streamlit as st
-import PyPDF2
-from groq import Groq
+import os
+import tempfile
+from langchain_groq import ChatGroq
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_core.prompts import ChatPromptTemplate
+# Ganti baris import chains yang lama dengan ini:
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains.retrieval import create_retrieval_chain
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="HR AI Reviewer", page_icon="🎭")
-
+st.set_page_config(page_title="Advanced HR RAG", page_icon="🧠")
 # --- BADGE PENGUNJUNG (VERSI BARU: Visitor Badge) ---
 st.markdown(
     """
@@ -17,132 +25,135 @@ st.markdown(
 
 # ... lanjut ke judul & sidebar ...
 
-# --- CSS BIAR TAMPILAN LEBIH BERSIH (Opsional) ---
-st.markdown("""
-<style>
-    .stChatMessage {border-radius: 10px; padding: 10px;}
-</style>
-""", unsafe_allow_html=True)
 
-# --- JUDUL & SIDEBAR ---
-st.title("🎭 Chat dengan HR AI (Bipolar Mode)")
-st.caption("Upload CV, lalu pilih: Mau HR yang memuji atau HR yang menjatuhkan mental?")
+st.title("🧠 HR AI: Vector Database Edition")
+st.caption("Sekarang AI membaca CV menggunakan sistem RAG canggih (Embeddings + Vector DB).")
 
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Konfigurasi")
-    
-    # 1. Input API Key
     api_key = st.text_input("Masukkan Groq API Key:", type="password")
     
-    # 2. Pilihan Mode HR (Switching Persona)
     st.divider()
-    st.subheader("Pilih Kepribadian HR:")
     mode_hr = st.radio(
         "Style Wawancara:",
-        ["😇 HR Ramah (Profesional)", "😈 HR Jaksel (Savage/Galak)"]
+        ["😇 HR Ramah", "😈 HR Jaksel (Savage)"]
     )
     
     st.divider()
-    
-    # 3. Upload File
-    uploaded_file = st.file_uploader("Upload file CV (PDF)", type=("pdf"))
+    uploaded_file = st.file_uploader("Upload CV (PDF)", type=("pdf"))
 
     if st.sidebar.button("Hapus Chat"):
         st.session_state.messages = [] # Kosongkan memori
         st.rerun() # Refresh halaman otomatis
 
-# --- FUNGSI BACA PDF ---
-def extract_text_from_pdf(file):
-    reader = PyPDF2.PdfReader(file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text()
-    return text
+# --- FUNGSI PROSES PDF KE VECTOR DB ---
+def process_pdf_to_vector_db(uploaded_file):
+    # 1. Simpan file sementara (LangChain butuh path file asli)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(uploaded_file.getvalue())
+        tmp_path = tmp_file.name
 
-# --- DEFINISI SYSTEM PROMPT (PERSONA) ---
-def get_system_prompt(mode, cv_text):
-    if mode == "😇 HR Ramah (Profesional)":
-        return f"""
-        Kamu adalah HRD Manager yang sangat profesional, ramah, suportif, dan keibuan/kebapakan.
-        Tugasmu: Review CV kandidat ini dan jawab pertanyaan user dengan sopan.
-        Gaya Bicara: Formal, menggunakan "Anda", memberikan semangat, dan konstruktif.
-        Selalu cari sisi positif dari kandidat, meskipun skill-nya kurang.
-        
-        DATA CV KANDIDAT:
-        {cv_text}
-        """
-    else: # Mode Galak
-        return f"""
-        Kamu adalah HRD Manager "Anak Jaksel" yang sangat galak, sinis, judgemental, dan elitist.
-        Tugasmu: Roasting (ejek) CV kandidat ini. Kamu benci kandidat yang skill-nya standar.
-        Gaya Bicara:
-        1. Campur Inggris-Indonesia (Jaksel)
-        2. Campur Bahasa Indonesia dan Bahasa Inggris (Indonesian-English code-mixing) di setiap kalimat.
-        3. Gunakan istilah gaul seperti: "literally", "honestly", "prefer", "vibe", "red flag", "big no", "lowkey", "makes sense", "culture fit", "cringe".
-        3. Kamu menolak pelamar ini karena skill-nya terlalu dasar (cuma belajar Python seminggu di YouTube).
-        4. Nadanya tidak marah, tapi meremehkan dengan gaya santai (passive-aggressive).
-        5. Jangan sopan! Bersikaplah meremehkan. Kalau skill-nya jelek, bilang jelek langsung.       
-        
-        DATA CV KANDIDAT:
-        {cv_text}
-        """
-# Gaya Bicara: Campur Inggris-Indonesia (Jaksel), pakai kata: 'literally', 'red flag', 'honestly', 'big no', 'cringe'.
-# Jangan sopan! Bersikaplah meremehkan. Kalau skill-nya jelek, bilang jelek langsung.
+    # 2. Load PDF
+    loader = PyPDFLoader(tmp_path)
+    docs = loader.load()
+
+    # 3. Pecah Teks (Chunking)
+    # Kita pecah jadi potongan 1000 karakter, dengan overlap 200 biar konteks nyambung
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    final_documents = text_splitter.split_documents(docs)
+
+    # 4. Buat Embeddings (Ubah teks jadi angka)
+    # Menggunakan model open-source gratis 'all-MiniLM-L6-v2'
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+
+    # 5. Masukkan ke Vector Database (FAISS)
+    vectors = FAISS.from_documents(final_documents, embeddings)
+    
+    # Hapus file sementara
+    os.remove(tmp_path)
+    return vectors
 
 # --- LOGIKA UTAMA ---
 if api_key and uploaded_file:
-    # 1. Inisialisasi Client (dengan Timeout lebih lama)
-    client = Groq(api_key=api_key, timeout=120.0)
-
-    # 2. Baca PDF Sekali Saja
-    if "pdf_text" not in st.session_state:
-        with st.spinner("Sedang membaca PDF..."):
-            st.session_state.pdf_text = extract_text_from_pdf(uploaded_file)
-        st.success("✅ PDF terbaca! Siap di-roasting atau dipuji.")
-
-    # 3. Update System Prompt Real-time
-    current_system_prompt = get_system_prompt(mode_hr, st.session_state.pdf_text)
     
-    # PERBAIKAN: Cek apakah messages belum ada ATAU list-nya kosong (len == 0)
-    if "messages" not in st.session_state or len(st.session_state.messages) == 0:
-        st.session_state.messages = [{"role": "system", "content": current_system_prompt}]
-    else:
-        # Kalau ada isinya, baru kita update item pertamanya
-        st.session_state.messages[0]["content"] = current_system_prompt
+    # Inisialisasi Vector DB (Hanya sekali saat upload)
+    if "vector_store" not in st.session_state:
+        with st.spinner("Sedang memecah dokumen & membuat Index Vector... (Agak lama di awal)"):
+            try:
+                st.session_state.vector_store = process_pdf_to_vector_db(uploaded_file)
+                st.success("✅ Dokumen berhasil di-index ke Vector DB!")
+            except Exception as e:
+                st.error(f"Gagal memproses PDF: {e}")
 
-    # 4. Tampilkan Chat History
+    # Siapkan Chat History
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Tampilkan Chat
     for message in st.session_state.messages:
-        if message["role"] != "system":
-            # Ganti ikon avatar sesuai role
-            avatar = "👤" if message["role"] == "user" else ("😇" if "Ramah" in mode_hr else "😈")
-            with st.chat_message(message["role"], avatar=avatar):
-                st.markdown(message["content"])
+        avatar = "👤" if message["role"] == "user" else ("😇" if "Ramah" in mode_hr else "😈")
+        with st.chat_message(message["role"], avatar=avatar):
+            st.markdown(message["content"])
 
-    # 5. Input Chat User
-    if prompt := st.chat_input("Tanya pendapat HR tentang CV ini..."):
-        # Tampilkan pesan user
+    # Input User
+    if prompt := st.chat_input("Tanya sesuatu tentang CV ini..."):
         st.chat_message("user", avatar="👤").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # Kirim ke AI
+        # --- PROSES RAG LANGCHAIN ---
         try:
-            # Pilihan Model: Bisa ganti ke 'llama-3.3-70b-versatile' kalau 8b kurang galak
-            response = client.chat.completions.create(
-                model="llama-3.1-8b-instant", 
-                messages=st.session_state.messages,
-                temperature=0.8 # Agak tinggi biar kreatif galaknya
+            # 1. Setup LLM (Groq)
+            llm = ChatGroq(
+                groq_api_key=api_key, 
+                model_name="llama-3.1-8b-instant",
+                temperature=0.7
             )
-            ai_reply = response.choices[0].message.content
+
+            # 2. Setup Prompt (Sesuai Persona)
+            if "Ramah" in mode_hr:
+                system_instruction = """
+                Kamu adalah HRD Manager yang ramah dan suportif.
+                Jawab pertanyaan berdasarkan konteks berikut:
+                <context>
+                {context}
+                </context>
+                Pertanyaan: {input}
+                """
+            else:
+                system_instruction = """
+                Kamu adalah HRD Jaksel yang galak, sinis, dan judgemental.
+                Gunakan istilah gaul (literally, honestly, red flag).
+                Jawab pertanyaan berdasarkan konteks berikut:
+                <context>
+                {context}
+                </context>
+                Pertanyaan: {input}
+                """
+
+            prompt_template = ChatPromptTemplate.from_template(system_instruction)
+
+            # 3. Setup Chain (Rantai Proses)
+            # Create Document Chain (Gabungin dokumen relevan ke prompt)
+            document_chain = create_stuff_documents_chain(llm, prompt_template)
             
-            # Tampilkan balasan AI
+            # Create Retrieval Chain (Cari dokumen di Vector DB -> Kirim ke Document Chain)
+            retriever = st.session_state.vector_store.as_retriever()
+            retrieval_chain = create_retrieval_chain(retriever, document_chain)
+
+            # 4. Eksekusi
+            with st.spinner("AI sedang mencari referensi di Vector DB..."):
+                response = retrieval_chain.invoke({"input": prompt})
+            
+            ai_reply = response['answer']
+
+            # Tampilkan Hasil
             icon_hr = "😇" if "Ramah" in mode_hr else "😈"
             st.chat_message("assistant", avatar=icon_hr).markdown(ai_reply)
             st.session_state.messages.append({"role": "assistant", "content": ai_reply})
-            
+
         except Exception as e:
             st.error(f"Error: {e}")
 
 elif not api_key:
-    st.warning("👈 Masukkan API Key dulu di menu sebelah kiri!")
-elif not uploaded_file:
-    st.info("👈 Upload file PDF CV kamu dulu ya!")
+    st.warning("👈 Masukkan API Key dulu bos!")
