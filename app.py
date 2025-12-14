@@ -146,11 +146,21 @@ if api_key and uploaded_file:
                 response = retrieval_chain.invoke({"input": prompt})
             
             ai_reply = response['answer']
+            source_docs = response['context'] # <--- INI DATA SUMBERNYA
 
-            # Tampilkan Hasil
+            # Tampilkan Hasil Jawaban
             icon_hr = "😇" if "Ramah" in mode_hr else "😈"
             st.chat_message("assistant", avatar=icon_hr).markdown(ai_reply)
+            
+            # --- FITUR BARU: SOURCE EVIDENCE (BUKTI) ---
+            with st.expander("🔍 Lihat Referensi Asli (Source)"):
+                for i, doc in enumerate(source_docs):
+                    st.markdown(f"**Referensi {i+1}:**")
+                    st.info(doc.page_content[:300] + "...") # Tampilkan 300 huruf pertama saja
+            # -------------------------------------------
+
             st.session_state.messages.append({"role": "assistant", "content": ai_reply})
+            
 
         except Exception as e:
             st.error(f"Error: {e}")
