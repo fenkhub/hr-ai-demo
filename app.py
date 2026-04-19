@@ -26,8 +26,10 @@ st.markdown(
 # ... lanjut ke judul & sidebar ...
 
 
-st.title("🧠 HR AI: Vector Database Edition")
-st.caption("Sekarang AI membaca CV menggunakan sistem RAG canggih (Embeddings + Vector DB).")
+st.title("🧠 HR AI: Human Resource BIPOLAR Edition")
+st.caption("Memanfaatkan AI untuk membaca CV. Aplikasi ini menggunakan sistem RAG (Embeddings + Vector DB).")
+st.caption("Untuk ngobrol dengan orang HR yang ramah silahkan pilih 'HR Ramah'. Bila mau ngobrol dengan orang HR s4bleng silahkan pilih'HR Jaksel'")
+st.caption("Ini aplikasi hanya untuk pembelajaran dan tidak bermaksud merendahkan atau menghina orang atau pun pihak. Tahap percobaan pengembangan Aplikasi dengan menggunakan sistem RAG (Embeddings + Vector DB).")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -37,7 +39,8 @@ with st.sidebar:
     st.divider()
     mode_hr = st.radio(
         "Style Wawancara:",
-        ["😇 HR Ramah", "😈 HR Jaksel (Savage)"]
+        ["😇 HR Ramah", "😈 HR S4bleng (Savage)"]
+        #["😇 HR Ramah", "😈 HR Jaksel (Savage)"]
     )
     
     st.divider()
